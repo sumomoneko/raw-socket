@@ -14,7 +14,7 @@ impl RawSocket {
     pub fn new(domain: Domain, kind: Type, protocol: Option<Protocol>) -> Result<Self> {
         let sys = crate::RawSocket::new(domain, kind, protocol)?;
         sys.set_nonblocking(true)?;
-        let io  = AsyncFd::new(sys)?;
+        let io = AsyncFd::new(sys)?;
         Ok(RawSocket { io })
     }
 
@@ -33,7 +33,7 @@ impl RawSocket {
     pub async fn recv_msg(
         &self,
         data: &[IoSliceMut<'_>],
-        ctrl: Option<&mut [u8]>
+        ctrl: Option<&mut [u8]>,
     ) -> Result<(usize, SocketAddr)> {
         let ctrl = ctrl.unwrap_or(&mut []);
         self.read(|s| s.recv_msg(data, ctrl)).await
@@ -47,7 +47,7 @@ impl RawSocket {
         &self,
         addr: A,
         data: &[IoSlice<'_>],
-        ctrl: Option<&[u8]>
+        ctrl: Option<&[u8]>,
     ) -> Result<usize> {
         let ctrl = ctrl.unwrap_or(&[]);
         self.write(|s| s.send_msg(&addr, data, ctrl)).await
@@ -65,7 +65,7 @@ impl RawSocket {
         loop {
             let mut guard = self.io.readable().await?;
             match guard.try_io(|inner| f(inner.get_ref())) {
-                Ok(r)  => return r,
+                Ok(r) => return r,
                 Err(_) => continue,
             }
         }
@@ -75,7 +75,7 @@ impl RawSocket {
         loop {
             let mut guard = self.io.writable().await?;
             match guard.try_io(|inner| f(inner.get_ref())) {
-                Ok(r)  => return r,
+                Ok(r) => return r,
                 Err(_) => continue,
             }
         }
