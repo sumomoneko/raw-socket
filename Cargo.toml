@@ -28,6 +28,10 @@ version = "1.0.1"
 features = ["net"]
 optional = true
 default-features = false
+
+[dependencies.futures]
+version = "0.3.16"
+
 [dev-dependencies.anyhow]
 version = "1.0.37"
 

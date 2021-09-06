@@ -1,10 +1,15 @@
 // Copyright (C) 2020 - Will Glozer. All rights reserved.
 
-use std::io::{IoSlice, IoSliceMut, Result};
-use std::net::{SocketAddr, ToSocketAddrs};
-use tokio::io::unix::AsyncFd;
-use crate::{Domain, Type, Protocol};
 use crate::option::{Level, Name, Opt};
+use crate::{Domain, Protocol, Type};
+use futures::ready;
+use std::io::{self, IoSlice, IoSliceMut, Result};
+use std::net::{SocketAddr, ToSocketAddrs};
+use std::os::unix::prelude::*;
+use std::pin::Pin;
+use std::task::{Context, Poll};
+use tokio::io::unix::AsyncFd;
+use tokio::io::{AsyncRead, AsyncWrite};
 
 pub struct RawSocket {
     io: AsyncFd<crate::RawSocket>,
@@ -79,5 +84,66 @@ impl RawSocket {
                 Err(_) => continue,
             }
         }
+    }
+}
+
+impl AsyncWrite for RawSocket {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        loop {
+            let mut guard = ready!(self.io.poll_write_ready_mut(cx))?;
+
+            match guard.try_io(|inner| inner.get_mut().write(buf)) {
+                Ok(result) => return Poll::Ready(result),
+                Err(_would_block) => continue,
+            }
+        }
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        self.io.get_ref().shutdown(std::net::Shutdown::Write)?;
+        Poll::Ready(Ok(()))
+    }
+}
+
+impl AsyncRead for RawSocket {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        loop {
+            let mut guard = ready!(self.io.poll_read_ready_mut(cx))?;
+
+            match guard.try_io(|inner| {
+                let b = unsafe { buf.unfilled_mut() };
+                let b = unsafe { std::mem::transmute::<_, &mut [u8]>(b) };
+
+                inner.get_mut().read(b)
+            }) {
+                Ok(result) => {
+                    let result = result.and_then(|size| {
+                        unsafe { buf.assume_init(size) };
+                        buf.advance(size);
+                        Ok(())
+                    });
+                    return Poll::Ready(result);
+                }
+                Err(_would_block) => continue,
+            }
+        }
+    }
+}
+
+impl AsRawFd for RawSocket {
+    fn as_raw_fd(&self) -> RawFd {
+        self.io.get_ref().as_raw_fd()
     }
 }

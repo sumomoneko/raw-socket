@@ -1,6 +1,6 @@
 // Copyright (C) 2020 - Will Glozer. All rights reserved.
 
-use std::io::{Error, ErrorKind, IoSlice, IoSliceMut, Result};
+use std::io::{Error, ErrorKind, IoSlice, IoSliceMut, Read, Result, Write};
 use std::mem::{size_of, transmute, zeroed};
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::os::unix::io::{AsRawFd, RawFd};
@@ -67,6 +67,10 @@ impl RawSocket {
         }
     }
 
+    pub fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+        self.sys.read(buf)
+    }
+
     pub fn send_to<A: ToSocketAddrs>(&self, buf: &[u8], addr: A) -> Result<usize> {
         self.sys.send_to(buf, &sockaddr(addr)?)
     }
@@ -97,6 +101,14 @@ impl RawSocket {
                 _           => Err(Error::last_os_error()),
             }
         }
+    }
+
+    pub fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        self.sys.write(buf)
+    }
+
+    pub fn shutdown(&self, how: std::net::Shutdown) -> std::io::Result<()> {
+        self.sys.shutdown(how)
     }
 
     pub fn get_sockopt<O: Opt>(&self, level: Level, name: Name) -> Result<O> {
